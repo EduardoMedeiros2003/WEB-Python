@@ -1,10 +1,13 @@
 #Definir as rotas 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 from app.models.user import LoginPayload
 from pydantic import ValidationError
 from app import db
 from bson import ObjectId
 from app.models.products import *
+from app.decorators import token_required
+from datetime import datetime, timedelta, timezone
+import jwt
 
 main_bp = Blueprint('main_bp', __name__)
 
@@ -19,10 +22,17 @@ def login():
     except Exception as e:
         return jsonify({"error":"Erro durante a requisição do dado"}), 500
 
-    if user_data.username == 'admin' and user_data.password == '123':
-        return jsonify({"message":"Login bem-sucediso!"}),200
-    else:
-        return jsonify({"message":"Credenciais invalidas"}),401
+    if user_data.username == 'admin' and user_data.password == 'supersecret':
+        token = jwt.encode({
+            "user_id": user_data.username,
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=30)# tempo de expriração 
+        }, 
+        current_app.config['SECRET_KEY'], 
+        algorithm="HS256")
+
+        return jsonify({'access_token': token}),200
+    
+    return jsonify({"message":"Credenciais invalidas"}),401
 
 
 # RF: O sistema deve permitir listagem de todos os produtos
@@ -35,8 +45,20 @@ def get_products():
 
 # RF: O sistema deve permitir a criacao de um novo produto
 @main_bp.route('/products', methods=['POST'])
-def create_product():
-    return jsonify({"message":"Esta é a rota de criação de produto"})
+@token_required
+def create_product(current_user):
+    try:
+        product= Product(**request.get_json())
+    except ValidationError as e:
+        return jsonify({'erro':e.errors()}),400
+    
+    result = db.products.insert_one(product.model_dump())
+    
+    return jsonify({
+        "message": "Produto pode ser criado",
+        "usuario_autenticado": current_user["user_id"],
+        "id": str(result.inserted_id)
+    }),201
 
 # RF: O sistema deve permitir a visualizacao dos detalhes de um unico produto
 @main_bp.route('/product/<string:product_id>', methods=['GET'])
