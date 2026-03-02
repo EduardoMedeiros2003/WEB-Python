@@ -9,6 +9,9 @@ from app.decorators import token_required
 from datetime import datetime, timedelta, timezone
 import jwt
 from bson.errors import InvalidId
+import csv
+import os 
+import io
 
 main_bp = Blueprint('main_bp', __name__)
 
@@ -115,7 +118,42 @@ def delete_product(token, product_id):
 
 # RF: O sistema deve permitir a importacao de vendas através de um arquivo
 @main_bp.route('/sales/upload', methods=['POST'])
-def upload_sales():
+@token_required
+def upload_sales(token):
+    if 'file' not in request.files:
+        return jsonify({"erro":"Nenhum arquivo foi enviado"}),400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"erro": "Nenhum arquivo foi selecionado"}),400
+    
+    if file and file.filename.endswith('.csv'):
+        csv_stream = io.StringIO(file.stream.read().decode('UTF-8'), newline=None)
+        csv_reader = csv.DictReader(csv_stream)
+
+        sales_to_insert = []
+        error =[]
+        for row_num, row in enumerate(csv_reader, 1):
+            try:
+                from app.models.sale import Sale
+                sale_data = Sale(**row)
+                sales_to_insert.append(sale_data.model_dump())
+
+            except ValidationError as e:
+                error.append(f'Linha{row_num}: com dados inválidos - {e.errors()}')
+            except Exception as e:
+                error.append(f"Linha {row_num}: Erro inesperado ao processar a linha - {str(e)}")
+
+        if sales_to_insert:
+            try:
+                db.sales.insert_many(sales_to_insert)
+            except Exception as e:
+                return jsonify({"error":f"Erro ao inserir dados no banco:{str(e)}"}),500
+            
+            return jsonify({"message":"Upload realizado com sucesso.",
+                            "vendas_importadas": len(sales_to_insert),
+                            "erros_encontrados": error}),200
+
     return jsonify({"message":"Esta é a rota de upload do arquivo de vendas"})
 
 @main_bp.route('/')
