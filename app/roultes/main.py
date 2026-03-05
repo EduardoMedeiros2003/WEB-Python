@@ -12,31 +12,53 @@ from bson.errors import InvalidId
 import csv
 import os 
 import io
+from flask import render_template, redirect, url_for, session
 
 main_bp = Blueprint('main_bp', __name__)
 
 # RF: O sistema deve permitir que o usuário se autentique para obter um token
-@main_bp.route('/login', methods=['POST'])
+@main_bp.route('/login', methods=['GET', 'POST'])
 def login():
+
+    # 🔹 Se for GET → apenas renderiza a página
+    if request.method == 'GET':
+        return render_template("login.html")
+
+    # 🔹 Se for POST → processa login
     try:
-       raw_data = request.get_json()
-       user_data = LoginPayload(**raw_data)
+        # Se vier do formulário HTML
+        if request.form:
+            raw_data = request.form.to_dict()
+        else:
+            raw_data = request.get_json()
+
+        user_data = LoginPayload(**raw_data)
+
     except ValidationError as e:
-        return jsonify({"error":e.errors()}), 400
-    except Exception as e:
-        return jsonify({"error":"Erro durante a requisição do dado"}), 500
+        return jsonify({"error": e.errors()}), 400
+
+    except Exception:
+        return jsonify({"error": "Erro durante a requisição do dado"}), 500
+
 
     if user_data.username == 'admin' and user_data.password == 'supersecret':
+
         token = jwt.encode({
             "user_id": user_data.username,
-            "exp": datetime.now(timezone.utc) + timedelta(minutes=30)# tempo de expriração 
-        }, 
-        current_app.config['SECRET_KEY'], 
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=30)
+        },
+        current_app.config['SECRET_KEY'],
         algorithm="HS256")
 
-        return jsonify({'access_token': token}),200
-    
-    return jsonify({"message":"Credenciais invalidas"}),401
+        # 🔹 Se for API → retorna JSON
+        if request.is_json:
+            return jsonify({'access_token': token}), 200
+
+        # 🔹 Se for formulário HTML → cria sessão e redireciona
+        session["user"] = user_data.username
+        return redirect(url_for("main_bp.dashboard"))
+
+    return jsonify({"message": "Credenciais invalidas"}), 401
 
 
 # RF: O sistema deve permitir listagem de todos os produtos
