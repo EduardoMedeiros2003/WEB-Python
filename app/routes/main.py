@@ -12,7 +12,7 @@ from bson.errors import InvalidId
 import csv
 import os 
 import io
-from flask import render_template, redirect, url_for, session
+from flask import render_template, redirect, url_for, session, flash
 
 main_bp = Blueprint('main_bp', __name__)
 
@@ -60,32 +60,51 @@ def login():
 
     return jsonify({"message": "Credenciais invalidas"}), 401
 
+@main_bp.route("/dashboard")
+def dashboard():
+    return render_template("dashboard.html")
+
 
 # RF: O sistema deve permitir listagem de todos os produtos
 @main_bp.route('/products', methods=['GET'])
 def get_products():
-    products_cursor = db.products.find({})
-    products_list = [ProductDBModel(**product).model_dump(by_alias=True, exclude_none=True) for product in products_cursor]
-  
-    return jsonify(products_list)
+
+    products = list(db.products.find())
+
+    return render_template(
+        "products.html",
+        products=products,
+        title="Produtos"
+    )
+
+#RF: O sistema deve mostar um formulario para criação de um novo dado 
+@main_bp.route('/products/new', methods=['GET'])
+def new_product():
+    return render_template("add_product.html")
 
 # RF: O sistema deve permitir a criacao de um novo produto
-@main_bp.route('/products', methods=['POST'])
-@token_required
-def create_product(current_user):
-    try:
-        product= Product(**request.get_json())
-    except ValidationError as e:
-        return jsonify({'erro':e.errors()}),400
-    
-    result = db.products.insert_one(product.model_dump())
-    
-    return jsonify({
-        "message": "Produto pode ser criado",
-        "usuario_autenticado": current_user["user_id"],
-        "id": str(result.inserted_id)
-    }),201
+@main_bp.route('/products/new', methods=['POST'])
+def create_product():
 
+    try:
+        data = request.form.to_dict()
+
+        data["price"] = float(data["price"])
+        data["stock"] = int(data["stock"])
+
+        product = Product(**data)
+
+        db.products.insert_one(product.model_dump())
+
+        flash("Produto criado com sucesso!", "success")
+
+        return redirect(url_for("main_bp.get_products"))
+
+    except Exception as e:
+        print(e)
+        flash("Erro ao criar produto", "danger")
+        return redirect(url_for("main_bp.new_product"))
+    
 # RF: O sistema deve permitir a visualizacao dos detalhes de um unico produto
 @main_bp.route('/product/<string:product_id>', methods=['GET'])
 def get_product_by_id(product_id):
