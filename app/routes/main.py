@@ -158,17 +158,24 @@ def update_product(product_id):
         return redirect(url_for("main_bp.get_products"))
 
 # RF: O sistema deve permitir a delecao de um unico produto e produto existente
-@main_bp.route('/product/<string:product_id>', methods=['DELETE'])
-@token_required
-def delete_product(token, product_id):
+@main_bp.route('/products/delete/<string:product_id>', methods=['GET'])
+def delete_product(product_id):
+
     try:
         oid = ObjectId(product_id)
-        delete_product = db.products.delete_one({"_id":oid})
-        if delete_product.deleted_count == 0:
-            return jsonify({"erro": "Produto não foi encontrado"}),404
-        return "",204
-    except Exception:
-        return jsonify({"erro":f"id do produto inválido"}),400
+
+        result = db.products.delete_one({"_id": oid})
+
+        if result.deleted_count == 0:
+            flash("Produto não encontrado", "danger")
+        else:
+            flash("Produto excluído com sucesso!", "success")
+
+    except Exception as e:
+        print(e)
+        flash("ID do produto inválido", "danger")
+
+    return redirect(url_for("main_bp.get_products"))
 
 # RF: O sistema deve permitir a importacao de vendas através de um arquivo
 @main_bp.route('/sales/upload', methods=['POST'])

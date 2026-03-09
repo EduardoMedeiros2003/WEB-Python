@@ -25,7 +25,7 @@
                 <td>{{ product.stock }}</td>
                 <td>
                     <a href="{{ url_for('main_bp.edit_product', product_id=product._id) }}" class="btn btn-sm btn-warning"> Editar </a>
-                    <a href="#" class="btn btn-sm btn-danger">Excluir</a>
+                    <a href="{{ url_for('main_bp.delete_product', product_id=product._id) }}" class="btn btn-sm btn-danger"onclick="return confirm('Tem certeza que deseja excluir este produto?');"> Excluir </a>
                 </td>
             </tr>
             {% else %}
