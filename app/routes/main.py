@@ -121,28 +121,41 @@ def get_product_by_id(product_id):
     else:
         return jsonify({"erro": f"Produto com o id: {product_id} - Não encontrado"}),404
 
-# RF: O sistema deve permitir a atualizacao de um unico produto e produto existente
-@main_bp.route('/product/<string:product_id>', methods=['PUT'])
-@token_required
-def update_product(token, product_id):
-    try:
-        oid = ObjectId(product_id)
-        update_data = UpdateProduct(**request.get_json())
-        update_result = db.products.update_one(
-            {"_id": oid},
-            {"$set": update_data.model_dump(exclude_unset=True)}
-        )
-        if update_result.matched_count == 0:
-            return jsonify({"error": "Produto não encontrado"}), 404
-        updated_product = db.products.find_one({"_id": oid})
-        return jsonify(ProductDBModel(**updated_product).model_dump(by_alias=True, exclude_none=True))
-    except ValidationError as e:
-        return jsonify({"error": e.errors()})
-    except InvalidId:
-        return jsonify({"error": "ID inválido"}), 400
+#RF: o sistema vai abrir a aba de edição 
+@main_bp.route('/products/edit/<string:product_id>', methods=['GET'])
+def edit_product(product_id):
 
+    product = db.products.find_one({"_id": ObjectId(product_id)})
+
+    if not product:
+        flash("Produto não encontrado", "danger")
+        return redirect(url_for("main_bp.get_products"))
+
+    return render_template("edit_product.html", product=product)
+
+# RF: O sistema deve permitir a atualizacao de um unico produto e produto existente
+@main_bp.route('/products/edit/<string:product_id>', methods=['POST'])
 def update_product(product_id):
-    return jsonify({"message":f"Esta é a rota de atualizacao do produto com o id {product_id}"})
+
+    try:
+        data = request.form.to_dict()
+
+        data["price"] = float(data["price"])
+        data["stock"] = int(data["stock"])
+
+        db.products.update_one(
+            {"_id": ObjectId(product_id)},
+            {"$set": data}
+        )
+
+        flash("Produto atualizado com sucesso!", "success")
+
+        return redirect(url_for("main_bp.get_products"))
+
+    except Exception as e:
+        print(e)
+        flash("Erro ao atualizar produto", "danger")
+        return redirect(url_for("main_bp.get_products"))
 
 # RF: O sistema deve permitir a delecao de um unico produto e produto existente
 @main_bp.route('/product/<string:product_id>', methods=['DELETE'])
